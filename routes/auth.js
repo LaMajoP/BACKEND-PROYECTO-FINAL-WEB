@@ -1,52 +1,57 @@
 //REGISTER
     const express = require('express');
+    const router = express.Router();
     const bcrypt = require('bcryptjs');
     const jwt = require('jsonwebtoken');
     const { db } = require('../firebase');
-    const router = express.Router();
 
     router.post('/register', async (req, res) => {
-    const { email, password, role } = req.body;
-  
-    if (!['cliente', 'trabajador'].includes(role)) {
-      return res.status(400).send('Rol inválido');
-    }
-  
-    //HASHING WITH BCRYPT
-    const hashedPassword = await bcrypt.hash(password, 10);
-  
-    await setDoc(doc(db, "users", email), {
-      email,
-      password: hashedPassword,
-      role
-    });
-  
-    res.status(201).send("Usuario registrado");
-  });
+        const { email, password, role } = req.body;
+      
+        if (!email || !password) return res.status(400).send("Faltan campos");
+        if (!['cliente', 'trabajador'].includes(role)) {
+          return res.status(400).send('Rol inválido');
+        }
+      
+        const hashedPassword = await bcrypt.hash(password, 10);
+      
+        await db.collection("users").doc(email).set({
+          email,
+          password: hashedPassword,
+          role
+        });
+      
+        res.status(201).send("Usuario registrado");
+      });      
   
 //LOGIN
-    router.post('/login', async (req, res) => {
+router.post('/login', async (req, res) => {
     const { email, password } = req.body;
   
-    const docSnap = await getDoc(doc(db, "users", email)); //obtiene el documento del usuario desde la base de datos
-    if (!docSnap.exists()) return res.status(404).send("Usuario no existe");
+    const userDoc = await db.collection("users").doc(email).get();
   
-    const user = docSnap.data(); //obtiene los datos del usuario
+    if (!userDoc.exists) {
+      return res.status(404).send("Usuario no existe");
+    }
+  
+    const user = userDoc.data();
   
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).send("Contraseña incorrecta");
   
-    const token = jwt.sign( //creamos un JWT
+    const token = jwt.sign(
       {
         email: user.email,
         role: user.role
       },
-      'mi_clave_secreta',
+      process.env.JWT_SECRET || 'mi_clave_secreta',
       { expiresIn: '1h' }
     );
   
     res.json({ token });
   });
+
+  
   
 //TOKEN CON JWT
 function verificarJWT(req, res, next) { //middleware to verificate tokens JWT
@@ -70,19 +75,18 @@ function verificarJWT(req, res, next) { //middleware to verificate tokens JWT
     next();
   }
 
-  import jwtDecode from "jwt-decode";
-
-const token = localStorage.getItem('token');
-const decoded = jwtDecode(token); // { email: ..., role: 'cliente' }
-
-if (decoded.role === 'cliente') {
-  window.location.href = '/cliente/dashboard';
-} else if (decoded.role === 'trabajador') {
-  window.location.href = '/trabajador/dashboard';
-}
+    // Ruta protegida
+router.get('/perfil', verificarJWT, (req, res) => {
+    res.json({
+      mensaje: 'Acceso concedido',
+      usuario: req.user
+    });
+  });
 
 //CLOSE SESSION
 function logout() {
     localStorage.removeItem('token'); // Elimina el token del almacenamiento local
     window.location.href = '/login'; // Redirige al usuario a la página de inicio de sesión
   }
+
+  module.exports = router;
