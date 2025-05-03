@@ -80,3 +80,9 @@ if (decoded.role === 'cliente') {
 } else if (decoded.role === 'trabajador') {
   window.location.href = '/trabajador/dashboard';
 }
+
+//CLOSE SESSION
+function logout() {
+    localStorage.removeItem('token'); // Elimina el token del almacenamiento local
+    window.location.href = '/login'; // Redirige al usuario a la página de inicio de sesión
+  }
