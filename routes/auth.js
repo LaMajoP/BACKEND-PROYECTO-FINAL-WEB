@@ -72,6 +72,13 @@ function soloTrabajador(req, res, next) {
   }
   next();
 }
+// MIDDLEWARE TO CHECK IF USER IS CLIENT
+function soloCliente(req, res, next) {
+  if (req.user.role !== 'cliente') {
+    return res.status(403).send('Acceso denegado');
+  }
+  next();
+}
 
 // PROFILE
 router.get('/perfil', verificarJWT, (req, res) => {
@@ -90,6 +97,8 @@ router.get('/inventario', verificarJWT, soloTrabajador, (req, res) => {
     res.status(500).send('Error al leer el inventario');
   }
 });
+
+// MANAGE OF PRODUCST AND INVENTORY BY WORKER
 
 // PUT UPDATE PRICE
 router.put('/inventario', verificarJWT, soloTrabajador, (req, res) => {
@@ -152,7 +161,18 @@ router.delete('/inventario', verificarJWT, soloTrabajador, (req, res) => {
   }
 });
 
-// LOGOUT CLIENT-SIDE
+// GET INVENTORY BEING CLIENT
+router.get('/inventario-cliente', verificarJWT, soloCliente, (req, res) => {
+  try {
+    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
+    res.json(inventario);
+  } catch (err) {
+    res.status(500).send('Error al leer el inventario');
+  }
+});
+
+
+// LOGOUT TO CLIENT AND TO WORKER
 function logout() {
   localStorage.removeItem('token');
   window.location.href = '/login';
