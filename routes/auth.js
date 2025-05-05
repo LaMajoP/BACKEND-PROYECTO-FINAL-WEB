@@ -11,8 +11,14 @@ router.post('/register', async (req, res) => {
   const { email, password, role } = req.body;
 
   if (!email || !password) return res.status(400).send("Faltan campos");
-  if (!['cliente', 'trabajador'].includes(role)) {
+  if (!['cliente', 'vendedor'].includes(role)) {
     return res.status(400).send('Rol inválido');
+  }
+
+  // Verificar si el usuario ya existe
+  const userDoc = await db.collection("users").doc(email).get();
+  if (userDoc.exists) {
+    return res.status(400).send("Ese correo ya está en uso");
   }
 
   const hashedPassword = await bcrypt.hash(password, 10); //hashed password
@@ -27,29 +33,30 @@ router.post('/register', async (req, res) => {
 });
 
 // LOGIN
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+router.post('/login', async (req, res) => { 
+  const { email, password } = req.body; 
 
-  const userDoc = await db.collection("users").doc(email).get();
+  const userDoc = await db.collection("users").doc(email).get(); 
 
-  if (!userDoc.exists) return res.status(404).send("Usuario no existe");
+  if (!userDoc.exists) return res.status(404).send("Usuario no existe"); 
 
-  const user = userDoc.data();
+  const user = userDoc.data(); 
 
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) return res.status(401).send("Contraseña incorrecta");
+  const valid = await bcrypt.compare(password, user.password); 
+  if (!valid) return res.status(401).send("Contraseña incorrecta"); 
 
-  const token = jwt.sign(
-    {
-      email: user.email,
-      role: user.role
-    },
-    process.env.JWT_SECRET || 'mi_clave_secreta',
-    { expiresIn: '1h' }
-  );
+  const token = jwt.sign( 
+    { 
+      email: user.email, 
+      role: user.role 
+    }, 
+    process.env.JWT_SECRET || 'mi_clave_secreta', 
+    { expiresIn: '1h' } 
+  ); 
 
-  res.json({ token });
-});
+  // Incluye el rol en la respuesta
+  res.json({ token, role: user.role }); 
+}); 
 
 // JWT VERIFICATION MIDDLEWARE
 function verificarJWT(req, res, next) {
@@ -66,8 +73,8 @@ function verificarJWT(req, res, next) {
 }
 
 // MIDDLEWARE TO CHECK IF USER IS WORKER
-function soloTrabajador(req, res, next) {
-  if (req.user.role !== 'trabajador') {
+function soloVendedor(req, res, next) {
+  if (req.user.role !== 'vendedor') {
     return res.status(403).send('Acceso denegado');
   }
   next();
@@ -89,7 +96,7 @@ router.get('/perfil', verificarJWT, (req, res) => {
 });
 
 // GET INVENTARIO BY WORKER
-router.get('/inventario', verificarJWT, soloTrabajador, (req, res) => {
+router.get('/inventario', verificarJWT, soloVendedor, (req, res) => {
   try {
     const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
     res.json(inventario);
@@ -101,7 +108,7 @@ router.get('/inventario', verificarJWT, soloTrabajador, (req, res) => {
 // MANAGE OF PRODUCST AND INVENTORY BY WORKER
 
 // PUT UPDATE PRICE
-router.put('/inventario', verificarJWT, soloTrabajador, (req, res) => {
+router.put('/inventario', verificarJWT, soloVendedor, (req, res) => {
   const { nombreRestaurante, nombreCategoria, nombreProducto, nuevoPrecio } = req.body;
   try {
     const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
@@ -122,7 +129,7 @@ router.put('/inventario', verificarJWT, soloTrabajador, (req, res) => {
 });
 
 // POST ADD PRODUCT
-router.post('/inventario', verificarJWT, soloTrabajador, (req, res) => {
+router.post('/inventario', verificarJWT, soloVendedor, (req, res) => {
   const { nombreRestaurante, nombreCategoria, nuevoProducto } = req.body;
   try {
     const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
@@ -142,7 +149,7 @@ router.post('/inventario', verificarJWT, soloTrabajador, (req, res) => {
 });
 
 // DELETE PRODUCT
-router.delete('/inventario', verificarJWT, soloTrabajador, (req, res) => {
+router.delete('/inventario', verificarJWT, soloVendedor, (req, res) => {
   const { nombreRestaurante, nombreCategoria, nombreProducto } = req.body;
   try {
     const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
