@@ -178,11 +178,4 @@ router.get('/inventario-cliente', verificarJWT, soloCliente, (req, res) => {
   }
 });
 
-
-// LOGOUT TO CLIENT AND TO WORKER
-function logout() {
-  localStorage.removeItem('token');
-  window.location.href = '/login';
-}
-
 module.exports = router;
