@@ -25,5 +25,5 @@ function buscarProducto(nombre, categoria, producto) {
 
     return resultados.length ? resultados : "No se encontraron productos.";
 }
-
+// hola
 module.exports = buscarProducto;
