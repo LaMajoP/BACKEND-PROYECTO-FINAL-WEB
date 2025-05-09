@@ -5,15 +5,18 @@ const authRoutes = require('./routes/auth');
 
 const app = express();
 
-// Configuración de CORS para aceptar solo desde Vercel
+// Configuración de CORS para aceptar desde Vercel y permitir preflight
 const corsOptions = {
   origin: 'https://smart-line-mio.vercel.app',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Aceptar OPTIONS
+  allowedHeaders: ['Content-Type', 'Authorization']     // Permitir headers personalizados
 };
 
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Tus rutas
 app.use('/api/auth', authRoutes);
 
 const PORT = process.env.PORT || 3001;
