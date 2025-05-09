@@ -16,6 +16,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+app.options('*', cors(corsOptions)); // <-- esto asegura que OPTIONS responda
+
 // Tus rutas
 app.use('/api/auth', authRoutes);
 
