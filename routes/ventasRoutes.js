@@ -1,39 +1,58 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const { db } = require('../firebase');
 
-// Función de búsqueda reutilizable
-function buscarProducto(nombre, categoria, producto) {
-  const rawData = fs.readFileSync(path.join(__dirname, '../restaurants.json'), 'utf8');
-  const menu = JSON.parse(rawData);
-  let resultados = [];
+// GET /api/ventas/buscar?nombre=pollo&categoria=sushi&restaurante=Punto%20Wok&precioMin=5000&precioMax=20000
+router.get('/buscar', async (req, res) => {
+  const { nombre, categoria, restaurante, precioMin, precioMax } = req.query;
+  const resultados = [];
 
-  menu.forEach(restaurante => {
-    restaurante.categorias.forEach(cat => {
-      if ((!categoria || cat.nombre.toLowerCase().includes(categoria.toLowerCase())) &&
-          (!producto || cat.productos.some(prod => prod.nombre.toLowerCase().includes(producto.toLowerCase())))) {
-        cat.productos.forEach(prod => {
-          if (!nombre || prod.nombre.toLowerCase().includes(nombre.toLowerCase())) {
+  try {
+    const restaurantesSnap = await db.collection('restaurantes').get();
+
+    for (const restDoc of restaurantesSnap.docs) {
+      const restId = restDoc.id;
+
+      if (restaurante && restId.toLowerCase() !== restaurante.toLowerCase()) continue;
+
+      const categoriasSnap = await db.collection('restaurantes').doc(restId).collection('categorias').get();
+
+      for (const catDoc of categoriasSnap.docs) {
+        const catId = catDoc.id;
+
+        if (categoria && !catId.toLowerCase().includes(categoria.toLowerCase())) continue;
+
+        const productosSnap = await db
+          .collection('restaurantes')
+          .doc(restId)
+          .collection('categorias')
+          .doc(catId)
+          .collection('productos')
+          .get();
+
+        for (const prodDoc of productosSnap.docs) {
+          const prod = prodDoc.data();
+
+          const cumpleNombre = !nombre || prod.nombre.toLowerCase().includes(nombre.toLowerCase());
+          const cumpleMin = !precioMin || prod.precio >= parseFloat(precioMin);
+          const cumpleMax = !precioMax || prod.precio <= parseFloat(precioMax);
+
+          if (cumpleNombre && cumpleMin && cumpleMax) {
             resultados.push({
-              restaurante: restaurante.nombre,
-              categoria: cat.nombre,
+              restaurante: restId,
+              categoria: catId,
               ...prod
             });
           }
-        });
+        }
       }
-    });
-  });
+    }
 
-  return resultados.length ? resultados : "No se encontraron productos.";
-}
-
-// Ruta GET para buscar productos
-router.get('/buscar', (req, res) => {
-  const { nombre, categoria, producto } = req.query;
-  const resultado = buscarProducto(nombre, categoria, producto);
-  res.json(resultado);
+    res.json(resultados.length ? resultados : 'No se encontraron productos.');
+  } catch (error) {
+    console.error('❌ Error al buscar productos:', error.message);
+    res.status(500).send('Error al consultar los productos');
+  }
 });
 
 module.exports = router;

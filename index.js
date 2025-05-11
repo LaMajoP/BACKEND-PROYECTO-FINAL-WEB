@@ -3,10 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const ventasRoutes = require('./routes/ventasRoutes');
-app.use('/api/ventas', ventasRoutes);
 
-
-const app = express();
+const app = express(); // Inicialización de app
 
 // Configuración de CORS para aceptar desde Vercel y permitir preflight
 const corsOptions = {
@@ -23,6 +21,7 @@ app.options('*', cors(corsOptions)); // <-- esto asegura que OPTIONS responda
 
 // Tus rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/ventas', ventasRoutes); // Mueve esta línea después de la inicialización de app
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

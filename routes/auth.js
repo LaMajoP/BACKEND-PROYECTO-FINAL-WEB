@@ -149,19 +149,20 @@ router.post('/inventario', verificarJWT, soloVendedor, (req, res) => {
 });
 
 // DELETE PRODUCT
-router.delete('/inventario', verificarJWT, soloVendedor, (req, res) => {
+router.delete('/inventario', verificarJWT, soloVendedor, async (req, res) => {
   const { nombreRestaurante, nombreCategoria, nombreProducto } = req.body;
   try {
-    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
-    const restaurante = inventario.find(r => r.nombre === nombreRestaurante);
-    const categoria = restaurante?.categorias.find(c => c.nombre === nombreCategoria);
+    const restauranteRef = db.collection('restaurantes').doc(nombreRestaurante);
+    const categoriaRef = restauranteRef.collection('categorias').doc(nombreCategoria);
+    const productoRef = categoriaRef.collection('productos').doc(nombreProducto);
 
-    if (categoria) {
-      categoria.productos = categoria.productos.filter(p => p.nombre !== nombreProducto);
-      fs.writeFileSync('./restaurants.json', JSON.stringify(inventario, null, 2), 'utf8');
+    const productoSnapshot = await productoRef.get();
+
+    if (productoSnapshot.exists) {
+      await productoRef.delete();
       res.status(200).send('Producto eliminado');
     } else {
-      res.status(404).send('Categoría no encontrada');
+      res.status(404).send('Categoría o producto no encontrado');
     }
   } catch (err) {
     res.status(500).send('Error al eliminar el producto');
@@ -169,12 +170,35 @@ router.delete('/inventario', verificarJWT, soloVendedor, (req, res) => {
 });
 
 // GET INVENTORY BEING CLIENT
-router.get('/inventario-cliente', verificarJWT, soloCliente, (req, res) => {
+router.get('/inventario-cliente', verificarJWT, soloCliente, async (req, res) => {
   try {
-    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
-    res.json(inventario);
+    const resultado = [];
+    const restaurantesSnap = await db.collection('restaurantes').get();
+
+    for (const restDoc of restaurantesSnap.docs) {
+      const restId = restDoc.id;
+      const categoriasSnap = await db.collection('restaurantes').doc(restId).collection('categorias').get();
+
+      for (const catDoc of categoriasSnap.docs) {
+        const catId = catDoc.id;
+        const productosSnap = await db
+          .collection('restaurantes')
+          .doc(restId)
+          .collection('categorias')
+          .doc(catId)
+          .collection('productos')
+          .get();
+
+        for (const prodDoc of productosSnap.docs) {
+          const prod = prodDoc.data();
+          resultado.push({ restaurante: restId, categoria: catId, ...prod });
+        }
+      }
+    }
+
+    res.json(resultado);
   } catch (err) {
-    res.status(500).send('Error al leer el inventario');
+    res.status(500).send('Error al obtener el inventario desde Firestore');
   }
 });
 
