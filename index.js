@@ -3,12 +3,13 @@ const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const ventasRoutes = require('./routes/ventasRoutes');
+const inventoryRoutes = require('./routes/inventory');
 
 const app = express(); // Inicialización de app
 
 // Configuración de CORS para aceptar desde Vercel y permitir preflight
 const corsOptions = {
-  origin: 'https://smart-line-mio.vercel.app',
+  origin: ['https://smart-line-mio.vercel.app', 'http://localhost:3809', 'http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Aceptar OPTIONS
   allowedHeaders: ['Content-Type', 'Authorization']     // Permitir headers personalizados
@@ -22,6 +23,7 @@ app.options('*', cors(corsOptions)); // <-- esto asegura que OPTIONS responda
 // Tus rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/ventas', ventasRoutes); // Mueve esta línea después de la inicialización de app
+app.use('/api/inventory', inventoryRoutes);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

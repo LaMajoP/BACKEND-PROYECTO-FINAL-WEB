@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-// Eliminamos fs ya que no lo necesitamos
+const fs = require('fs');
 const { db } = require('../firebase');
 
 // REGISTER
@@ -96,52 +96,29 @@ router.get('/perfil', verificarJWT, (req, res) => {
 });
 
 // GET INVENTARIO BY WORKER
-router.get('/inventario', verificarJWT, soloVendedor, async (req, res) => {
+router.get('/inventario', verificarJWT, soloVendedor, (req, res) => {
   try {
-    const resultado = [];
-    const restaurantesSnap = await db.collection('restaurantes').get();
-
-    for (const restDoc of restaurantesSnap.docs) {
-      const restId = restDoc.id;
-      const categoriasSnap = await db.collection('restaurantes').doc(restId).collection('categorias').get();
-
-      for (const catDoc of categoriasSnap.docs) {
-        const catId = catDoc.id;
-        const productosSnap = await db
-          .collection('restaurantes')
-          .doc(restId)
-          .collection('categorias')
-          .doc(catId)
-          .collection('productos')
-          .get();
-
-        for (const prodDoc of productosSnap.docs) {
-          const prod = prodDoc.data();
-          resultado.push({ restaurante: restId, categoria: catId, ...prod });
-        }
-      }
-    }
-
-    res.json(resultado);
+    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
+    res.json(inventario);
   } catch (err) {
     res.status(500).send('Error al leer el inventario');
   }
 });
 
-// MANAGE OF PRODUCTS AND INVENTORY BY WORKER
+// MANAGE OF PRODUCST AND INVENTORY BY WORKER
 
 // PUT UPDATE PRICE
-router.put('/inventario', verificarJWT, soloVendedor, async (req, res) => {
+router.put('/inventario', verificarJWT, soloVendedor, (req, res) => {
   const { nombreRestaurante, nombreCategoria, nombreProducto, nuevoPrecio } = req.body;
   try {
-    const productoRef = db.collection('restaurantes').doc(nombreRestaurante)
-      .collection('categorias').doc(nombreCategoria)
-      .collection('productos').doc(nombreProducto);
+    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
+    const restaurante = inventario.find(r => r.nombre === nombreRestaurante);
+    const categoria = restaurante?.categorias.find(c => c.nombre === nombreCategoria);
+    const producto = categoria?.productos.find(p => p.nombre === nombreProducto);
 
-    const productoSnapshot = await productoRef.get();
-
-    if (productoSnapshot.exists) {
-      await productoRef.update({ precio: nuevoPrecio });
+    if (producto) {
+      producto.precio = nuevoPrecio;
+      fs.writeFileSync('./restaurants.json', JSON.stringify(inventario, null, 2), 'utf8');
       res.status(200).send('Producto actualizado');
     } else {
       res.status(404).send('Producto no encontrado');
@@ -152,16 +129,16 @@ router.put('/inventario', verificarJWT, soloVendedor, async (req, res) => {
 });
 
 // POST ADD PRODUCT
-router.post('/inventario', verificarJWT, soloVendedor, async (req, res) => {
+router.post('/inventario', verificarJWT, soloVendedor, (req, res) => {
   const { nombreRestaurante, nombreCategoria, nuevoProducto } = req.body;
   try {
-    const categoriaRef = db.collection('restaurantes').doc(nombreRestaurante)
-      .collection('categorias').doc(nombreCategoria);
+    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
+    const restaurante = inventario.find(r => r.nombre === nombreRestaurante);
+    const categoria = restaurante?.categorias.find(c => c.nombre === nombreCategoria);
 
-    const categoriaSnapshot = await categoriaRef.get();
-
-    if (categoriaSnapshot.exists) {
-      await categoriaRef.collection('productos').doc(nuevoProducto.nombre).set(nuevoProducto);
+    if (categoria) {
+      categoria.productos.push(nuevoProducto);
+      fs.writeFileSync('./restaurants.json', JSON.stringify(inventario, null, 2), 'utf8');
       res.status(201).send('Producto registrado');
     } else {
       res.status(404).send('Categoría no encontrada');
