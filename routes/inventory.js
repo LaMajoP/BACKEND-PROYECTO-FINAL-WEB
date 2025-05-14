@@ -47,33 +47,55 @@ router.delete('/categoria/:nombreCategoria', async (req, res) => {
   }
 });
 
-// Modificar nombre de categoría
-router.put('/categoria/:nombreCategoria', async (req, res) => {
+// Modificar nombre de categoría (renombrar documento y conservar productos)
+router.put('/categoria/modificarCategoria', async (req, res) => {
   try {
-    const { nombreRestaurante, nuevoNombre } = req.body;
-    const { nombreCategoria } = req.params;
+    const { nombreRestaurante, nombreCategoriaActual, nuevoNombreCategoria } = req.body;
 
-    if (!nombreRestaurante || !nuevoNombre) {
+    if (!nombreRestaurante || !nombreCategoriaActual || !nuevoNombreCategoria) {
       return res.status(400).json({ error: 'Datos incompletos' });
     }
 
-    const categoriaRef = db.collection('restaurantes').doc(nombreRestaurante)
-                         .collection('categorias').doc(nombreCategoria);
+    const dbRest = db.collection('restaurantes').doc(nombreRestaurante);
+    const categoriasRef = dbRest.collection('categorias');
+    const categoriaActualRef = categoriasRef.doc(nombreCategoriaActual);
+    const nuevaCategoriaRef = categoriasRef.doc(nuevoNombreCategoria);
 
-    const categoriaDoc = await categoriaRef.get();
+    const categoriaDoc = await categoriaActualRef.get();
     if (!categoriaDoc.exists) {
       return res.status(404).json({ error: 'Categoría no encontrada' });
     }
 
-    // Actualizar el nombre de la categoría
-    await categoriaRef.update({ nombre: nuevoNombre });
+    // Copiar datos del documento original
+    const data = categoriaDoc.data();
+    await nuevaCategoriaRef.set({
+      ...data,
+      nombre: nuevoNombreCategoria
+    });
 
-    res.status(200).json({ message: 'Categoría actualizada' });
-  } catch (err) {
-    console.error('Error al actualizar categoría:', err);
-    res.status(500).json({ error: 'Error al actualizar la categoría' });
+    // Copiar subcolección "productos"
+    const productosSnap = await categoriaActualRef.collection('productos').get();
+    const batch = db.batch();
+    productosSnap.forEach(doc => {
+      const productoData = doc.data();
+      const newDocRef = nuevaCategoriaRef.collection('productos').doc(doc.id);
+      batch.set(newDocRef, {
+        ...productoData,
+        categoria: nuevoNombreCategoria
+      });      
+    });
+
+    // Ejecutar batch y eliminar categoría original
+    await batch.commit();
+    await categoriaActualRef.delete();
+
+    res.status(200).json({ message: 'Categoría renombrada correctamente' });
+  } catch (error) {
+    console.error('Error al renombrar la categoría:', error);
+    res.status(500).json({ error: 'Error al modificar la categoría' });
   }
 });
+
 
 // Crear producto
 router.post('/producto', async (req, res) => {
@@ -108,7 +130,7 @@ router.post('/producto', async (req, res) => {
 });
 
 // Eliminar producto
-router.delete('/producto/:nombreProducto', async (req, res) => {
+router.delete('/producto/modificarProducto', async (req, res) => {
   try {
     const { nombreRestaurante, nombreCategoria } = req.body;
     const { nombreProducto } = req.params;
