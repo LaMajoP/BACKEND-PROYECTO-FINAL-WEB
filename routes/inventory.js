@@ -100,7 +100,7 @@ router.put('/categoria/modificarCategoria', async (req, res) => {
 // Crear producto
 router.post('/producto', async (req, res) => {
   try {
-    const { nombre, descripcion, precio, categoria, restaurante } = req.body;
+    const { nombre, descripcion, precio, categoria, restaurante, stock } = req.body;
 
     if (!nombre || !precio || !categoria || !restaurante) {
       return res.status(400).json({ error: 'Datos incompletos' });
@@ -111,7 +111,8 @@ router.post('/producto', async (req, res) => {
       descripcion: descripcion || '',
       precio: Number(precio),
       categoria,
-      restaurante
+      restaurante,
+      stock: Number(stock) || 0 // <-- Guardar el stock recibido
     };
 
     const categoriaRef = db.collection('restaurantes').doc(restaurante)
@@ -130,19 +131,19 @@ router.post('/producto', async (req, res) => {
 });
 
 // Eliminar producto
-router.delete('/producto/modificarProducto', async (req, res) => {
+router.delete('/producto/:nombreProducto', async (req, res) => {
   try {
-    const { nombreRestaurante, nombreCategoria } = req.body;
+    const { nombreRestaurante, nombreCategoria } = req.query;
     const { nombreProducto } = req.params;
 
-    if (!nombreRestaurante || !nombreCategoria) {
+    if (!nombreRestaurante || !nombreCategoria || !nombreProducto) {
       return res.status(400).json({ error: 'Datos incompletos' });
     }
 
     const productoRef = db.collection('restaurantes').doc(nombreRestaurante)
                          .collection('categorias').doc(nombreCategoria)
                          .collection('productos').doc(nombreProducto);
-    
+
     await productoRef.delete();
     res.status(200).json({ message: 'Producto eliminado' });
   } catch (err) {
@@ -173,6 +174,7 @@ router.put('/producto/:nombreProducto', async (req, res) => {
     const updateData = {
       ...datosActualizados,
       precio: Number(datosActualizados.precio || 0),
+      stock: Number(datosActualizados.stock) || 0, // <-- Guardar el stock actualizado
       categoria: nombreCategoria,
       restaurante: nombreRestaurante
     };
