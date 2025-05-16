@@ -5,29 +5,53 @@ const authRoutes = require('./routes/auth');
 const ventasRoutes = require('./routes/ventasRoutes');
 const inventoryRoutes = require('./routes/inventory');
 const feedbackRouter = require('./routes/feedback');
+const ordersRoutes = require('./routes/orders');
 
-const app = express(); // Inicialización de app
+// Inicializa Firebase Admin si usas Firestore
+const admin = require("firebase-admin");
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(), // O usa admin.credential.cert(require("./ruta/credenciales.json"))
+    // databaseURL: "https://<TU_PROJECT_ID>.firebaseio.com" // solo si usas RTDB
+  });
+}
 
-// Configuración de CORS para aceptar desde Vercel y permitir preflight
+const app = express();
+
+// Opciones de CORS para aceptar desde Verc , localhost, etc.
 const corsOptions = {
-  origin: ['https://smart-line-mio.vercel.app', 'http://localhost:3809', 'http://localhost:3000'],
+  origin: [
+    'https://smart-line-mio.vercel.app',
+    'http://localhost:3809',
+    'http://localhost:3000'
+  ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Aceptar OPTIONS
-  allowedHeaders: ['Content-Type', 'Authorization']     // Permitir headers personalizados
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
+
+const salesRouter = require('./routes/sales');
+app.use('/api/sales', salesRouter);
 
 app.use(cors(corsOptions));
 app.use(express.json());
 
-app.options('*', cors(corsOptions)); // <-- esto asegura que OPTIONS responda
+// Permitir preflight OPTIONS para todas las rutas
+app.options('*', cors(corsOptions));
 
-// Tus rutas
+// Rutas principales
 app.use('/api/auth', authRoutes);
 app.use('/api/ventas', ventasRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/feedback', feedbackRouter);
+app.use('/api/orders', ordersRoutes);
 
-// Agrega manejo de errores global
+// Ruta de prueba
+app.get("/", (req, res) => {
+  res.send("API funcionando correctamente");
+});
+
+// Manejo global de errores
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Algo salió mal!' });
