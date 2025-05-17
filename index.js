@@ -2,16 +2,32 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+// Importar rutas y middlewares
 const authRoutes = require('./routes/auth');
 const { verificarToken, verificarRol } = require('./routes/auth');
 const inventoryRoutes = require('./routes/inventory');
 const feedbackRouter = require('./routes/feedback');
+const ordersRoutes = require('./routes/orders');
+const salesRouter = require('./routes/sales');
 
+// Inicializa Firebase Admin si usas Firestore
+const admin = require("firebase-admin");
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(), // O usa admin.credential.cert(require("./ruta/credenciales.json"))
+    // databaseURL: "https://<TU_PROJECT_ID>.firebaseio.com" // solo si usas RTDB
+  });
+}
 
 const app = express();
 
+// Opciones de CORS para aceptar desde Vercel, localhost, etc.
 const corsOptions = {
-  origin: ['https://smart-line-mio.vercel.app', 'http://localhost:3809', 'http://localhost:3000'],
+  origin: [
+    'https://smart-line-mio.vercel.app',
+    'http://localhost:3809',
+    'http://localhost:3000'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -19,6 +35,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// Permitir preflight OPTIONS para todas las rutas
 app.options('*', cors(corsOptions));
 
 // Rutas públicas
@@ -28,7 +46,16 @@ app.use('/api/auth', authRoutes);
 app.use('/api/inventory', verificarToken, verificarRol(['vendedor']), inventoryRoutes);
 app.use('/api/feedback', verificarToken, verificarRol(['cliente']), feedbackRouter);
 
-// Manejo de errores global
+// Otras rutas
+app.use('/api/sales', salesRouter);
+app.use('/api/orders', ordersRoutes);
+
+// Ruta de prueba
+app.get("/", (req, res) => {
+  res.send("API funcionando correctamente");
+});
+
+// Manejo global de errores
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Error interno del servidor' });

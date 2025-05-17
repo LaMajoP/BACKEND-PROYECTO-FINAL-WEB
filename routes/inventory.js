@@ -69,7 +69,6 @@ router.put('/categoria/modificarCategoria', async (req, res) => {
       return res.status(404).json({ error: 'Categoría no encontrada' });
     }
 
-    // Copiar datos del documento original
     const data = categoriaDoc.data();
     await nuevaCategoriaRef.set({
       ...data,
