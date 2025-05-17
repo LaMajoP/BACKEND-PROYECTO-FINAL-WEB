@@ -4,7 +4,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { db } = require('../config/firebase');  // Ruta corregida
+const { db } = require('../config/firebase');
 
 router.post('/register', async (req, res) => {
   const { email, password, role } = req.body;

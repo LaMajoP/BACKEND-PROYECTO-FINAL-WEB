@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../firebase');
+const { db } = require('../config/firebase');
 
 // Registrar una venta y descontar stock
 router.post('/', async (req, res) => {
