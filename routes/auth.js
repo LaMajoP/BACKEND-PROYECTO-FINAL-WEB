@@ -3,10 +3,9 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const fs = require('fs');
-const { db } = require('../firebase');
+const { v4: uuidv4 } = require('uuid');
+const { db } = require('../config/firebase');  // Ruta corregida
 
-// REGISTER
 router.post('/register', async (req, res) => {
   const { email, password, role } = req.body;
 
@@ -58,148 +57,202 @@ router.post('/login', async (req, res) => {
   res.json({ token, role: user.role }); 
 }); 
 
-// JWT VERIFICATION MIDDLEWARE
-function verificarJWT(req, res, next) {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.sendStatus(403);
-
+// Middleware de verificación de token
+function verificarToken(req, res, next) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'mi_clave_secreta');
+    const bearerHeader = req.headers.authorization;
+
+    if (!bearerHeader || !bearerHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Token no proporcionado' });
+    }
+
+    const token = bearerHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
     next();
-  } catch (err) {
-    res.sendStatus(401);
+  } catch (error) {
+    console.error('Error de autenticación:', error);
+    res.status(401).json({ error: 'Token inválido o expirado' });
   }
 }
 
-// MIDDLEWARE TO CHECK IF USER IS WORKER
-function soloVendedor(req, res, next) {
-  if (req.user.role !== 'vendedor') {
-    return res.status(403).send('Acceso denegado');
-  }
-  next();
+// Middleware unificado de verificación de roles
+function verificarRol(rolesPermitidos) {
+  return function(req, res, next) {
+    if (!req.user || !req.user.role) {
+      return res.status(401).json({ 
+        error: 'Usuario no autenticado',
+        details: 'Se requiere autenticación para acceder a este recurso'
+      });
+    }
+
+    const userRole = req.user.role.toLowerCase();
+    if (!rolesPermitidos.includes(userRole)) {
+      return res.status(403).json({ 
+        error: 'Acceso denegado',
+        details: `Rol requerido: ${rolesPermitidos.join(' o ')}`
+      });
+    }
+
+    next();
+  };
 }
-// MIDDLEWARE TO CHECK IF USER IS CLIENT
-function soloCliente(req, res, next) {
-  if (req.user.role !== 'cliente') {
-    return res.status(403).send('Acceso denegado');
+
+// Validadores
+const validarDatosRegistro = (email, password, role) => {
+  const errores = [];
+
+  if (!email || !email.includes('@')) {
+    errores.push('Email inválido');
   }
-  next();
-}
 
-// PROFILE
-router.get('/perfil', verificarJWT, (req, res) => {
-  res.json({
-    mensaje: 'Acceso concedido',
-    usuario: req.user
-  });
-});
-
-// GET INVENTARIO BY WORKER
-router.get('/inventario', verificarJWT, soloVendedor, (req, res) => {
-  try {
-    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
-    res.json(inventario);
-  } catch (err) {
-    res.status(500).send('Error al leer el inventario');
+  if (!password || password.length < 6) {
+    errores.push('La contraseña debe tener al menos 6 caracteres');
   }
-});
 
-// MANAGE OF PRODUCST AND INVENTORY BY WORKER
+  if (!['cliente', 'vendedor'].includes(role?.toLowerCase())) {
+    errores.push('Rol inválido');
+  }
 
-// PUT UPDATE PRICE
-router.put('/inventario', verificarJWT, soloVendedor, (req, res) => {
-  const { nombreRestaurante, nombreCategoria, nombreProducto, nuevoPrecio } = req.body;
+  return errores;
+};
+
+// Rutas de autenticación
+router.post('/register', async (req, res) => {
   try {
-    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
-    const restaurante = inventario.find(r => r.nombre === nombreRestaurante);
-    const categoria = restaurante?.categorias.find(c => c.nombre === nombreCategoria);
-    const producto = categoria?.productos.find(p => p.nombre === nombreProducto);
+    const { email, password, role } = req.body;
 
-    if (producto) {
-      producto.precio = nuevoPrecio;
-      fs.writeFileSync('./restaurants.json', JSON.stringify(inventario, null, 2), 'utf8');
-      res.status(200).send('Producto actualizado');
-    } else {
-      res.status(404).send('Producto no encontrado');
+    // Validación de datos
+    const errores = validarDatosRegistro(email, password, role);
+    if (errores.length > 0) {
+      return res.status(400).json({ errores });
     }
-  } catch (err) {
-    res.status(500).send('Error al actualizar el inventario');
-  }
-});
 
-// POST ADD PRODUCT
-router.post('/inventario', verificarJWT, soloVendedor, (req, res) => {
-  const { nombreRestaurante, nombreCategoria, nuevoProducto } = req.body;
-  try {
-    const inventario = JSON.parse(fs.readFileSync('./restaurants.json', 'utf8'));
-    const restaurante = inventario.find(r => r.nombre === nombreRestaurante);
-    const categoria = restaurante?.categorias.find(c => c.nombre === nombreCategoria);
+    // Verificar si el usuario ya existe
+    const userSnapshot = await db.collection('users')
+      .where('email', '==', email)
+      .get();
 
-    if (categoria) {
-      categoria.productos.push(nuevoProducto);
-      fs.writeFileSync('./restaurants.json', JSON.stringify(inventario, null, 2), 'utf8');
-      res.status(201).send('Producto registrado');
-    } else {
-      res.status(404).send('Categoría no encontrada');
+    if (!userSnapshot.empty) {
+      return res.status(400).json({ error: 'El email ya está registrado' });
     }
-  } catch (err) {
-    res.status(500).send('Error al registrar el producto');
-  }
-});
 
-// DELETE PRODUCT
-router.delete('/inventario', verificarJWT, soloVendedor, async (req, res) => {
-  const { nombreRestaurante, nombreCategoria, nombreProducto } = req.body;
-  try {
-    const restauranteRef = db.collection('restaurantes').doc(nombreRestaurante);
-    const categoriaRef = restauranteRef.collection('categorias').doc(nombreCategoria);
-    const productoRef = categoriaRef.collection('productos').doc(nombreProducto);
+    // Crear nuevo usuario
+    const userId = uuidv4();
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const productoSnapshot = await productoRef.get();
+    const userData = {
+      userId,
+      email,
+      password: hashedPassword,
+      role: role.toLowerCase(),
+      createdAt: new Date().toISOString()
+    };
 
-    if (productoSnapshot.exists) {
-      await productoRef.delete();
-      res.status(200).send('Producto eliminado');
-    } else {
-      res.status(404).send('Categoría o producto no encontrado');
-    }
-  } catch (err) {
-    res.status(500).send('Error al eliminar el producto');
-  }
-});
+    await db.collection('users').doc(userId).set(userData);
 
-// GET INVENTORY BEING CLIENT
-router.get('/inventario-cliente', verificarJWT, soloCliente, async (req, res) => {
-  try {
-    const resultado = [];
-    const restaurantesSnap = await db.collection('restaurantes').get();
+    // Generar token
+    const token = jwt.sign(
+      {
+        userId,
+        email,
+        role: role.toLowerCase()
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
 
-    for (const restDoc of restaurantesSnap.docs) {
-      const restId = restDoc.id;
-      const categoriasSnap = await db.collection('restaurantes').doc(restId).collection('categorias').get();
-
-      for (const catDoc of categoriasSnap.docs) {
-        const catId = catDoc.id;
-        const productosSnap = await db
-          .collection('restaurantes')
-          .doc(restId)
-          .collection('categorias')
-          .doc(catId)
-          .collection('productos')
-          .get();
-
-        for (const prodDoc of productosSnap.docs) {
-          const prod = prodDoc.data();
-          resultado.push({ restaurante: restId, categoria: catId, ...prod });
-        }
+    // Respuesta exitosa
+    res.status(201).json({
+      message: 'Usuario registrado exitosamente',
+      token,
+      user: {
+        userId,
+        email,
+        role: role.toLowerCase()
       }
+    });
+
+  } catch (error) {
+    console.error('Error en registro:', error);
+    res.status(500).json({ error: 'Error en el servidor' });
+  }
+});
+
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email y contraseña son requeridos' });
     }
 
-    res.json(resultado);
-  } catch (err) {
-    res.status(500).send('Error al obtener el inventario desde Firestore');
+    // Buscar usuario
+    const usersRef = await db.collection('users')
+      .where('email', '==', email)
+      .get();
+
+    if (usersRef.empty) {
+      return res.status(401).json({ error: 'Credenciales inválidas' });
+    }
+
+    const userData = usersRef.docs[0].data();
+
+    // Verificar contraseña
+    const validPassword = await bcrypt.compare(password, userData.password);
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Credenciales inválidas' });
+    }
+
+    // Generar token
+    const token = jwt.sign(
+      {
+        userId: userData.userId,
+        email: userData.email,
+        role: userData.role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    // Respuesta exitosa
+    res.json({
+      message: 'Login exitoso',
+      token,
+      user: {
+        userId: userData.userId,
+        email: userData.email,
+        role: userData.role
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).json({ error: 'Error en el servidor' });
+  }
+});
+
+// Ruta protegida de ejemplo
+router.get('/perfil', verificarToken, async (req, res) => {
+  try {
+    const userDoc = await db.collection('users').doc(req.user.userId).get();
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const userData = userDoc.data();
+    delete userData.password; // No enviar la contraseña
+
+    res.json(userData);
+  } catch (error) {
+    console.error('Error al obtener perfil:', error);
+    res.status(500).json({ error: 'Error en el servidor' });
   }
 });
 
 module.exports = router;
+
+// Si necesitas los middlewares en otros archivos:
+module.exports.verificarToken = verificarToken;
+module.exports.verificarRol = verificarRol;

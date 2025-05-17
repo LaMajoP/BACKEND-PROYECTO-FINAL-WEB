@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../firebase');
+const { db } = require('../config/firebase');  // Ruta corregida
+const { verificarToken, verificarRol } = require('./auth'); // Actualizar la ruta de importación
+
+router.use(verificarToken);  // Protege todas las rutas
 
 // Crear categoría
 router.post('/categoria', async (req, res) => {
@@ -96,9 +99,40 @@ router.put('/categoria/modificarCategoria', async (req, res) => {
   }
 });
 
+// Ruta accesible para clientes y vendedores
+router.get('/producto/:nombreProducto', 
+  verificarToken, 
+  verificarRol(['cliente', 'vendedor']), 
+  async (req, res) => {
+  try {
+    const { nombreRestaurante, nombreCategoria } = req.query;
+    const { nombreProducto } = req.params;
+
+    if (!nombreRestaurante || !nombreCategoria || !nombreProducto) {
+      return res.status(400).json({ error: 'Datos incompletos' });
+    }
+
+    const productoRef = db.collection('restaurantes').doc(nombreRestaurante)
+                         .collection('categorias').doc(nombreCategoria)
+                         .collection('productos').doc(nombreProducto);
+
+    const productoDoc = await productoRef.get();
+    if (!productoDoc.exists) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    res.status(200).json(productoDoc.data());
+  } catch (err) {
+    console.error('Error al obtener producto:', err);
+    res.status(500).json({ error: 'Error al obtener el producto' });
+  }
+});
 
 // Crear producto
-router.post('/producto', async (req, res) => {
+router.post('/producto', 
+  verificarToken, 
+  verificarRol(['vendedor']), 
+  async (req, res) => {
   try {
     const { nombre, descripcion, precio, categoria, restaurante, stock } = req.body;
 
@@ -130,30 +164,11 @@ router.post('/producto', async (req, res) => {
   }
 });
 
-// Eliminar producto
-router.delete('/producto/:nombreProducto', async (req, res) => {
-  try {
-    const { nombreRestaurante, nombreCategoria } = req.query;
-    const { nombreProducto } = req.params;
-
-    if (!nombreRestaurante || !nombreCategoria || !nombreProducto) {
-      return res.status(400).json({ error: 'Datos incompletos' });
-    }
-
-    const productoRef = db.collection('restaurantes').doc(nombreRestaurante)
-                         .collection('categorias').doc(nombreCategoria)
-                         .collection('productos').doc(nombreProducto);
-
-    await productoRef.delete();
-    res.status(200).json({ message: 'Producto eliminado' });
-  } catch (err) {
-    console.error('Error al eliminar producto:', err);
-    res.status(500).json({ error: 'Error al eliminar el producto' });
-  }
-});
-
 // Modificar producto
-router.put('/producto/:nombreProducto', async (req, res) => {
+router.put('/producto/:nombreProducto', 
+  verificarToken, 
+  verificarRol(['vendedor']), 
+  async (req, res) => {
   try {
     const { nombreRestaurante, nombreCategoria, datosActualizados } = req.body;
     const { nombreProducto } = req.params;
@@ -195,8 +210,36 @@ router.put('/producto/:nombreProducto', async (req, res) => {
   }
 });
 
-// Obtener inventario completo
-router.get('/inventario-completo', async (req, res) => {
+// Eliminar producto
+router.delete('/producto/:nombreProducto', 
+  verificarToken, 
+  verificarRol(['vendedor']), 
+  async (req, res) => {
+  try {
+    const { nombreRestaurante, nombreCategoria } = req.query;
+    const { nombreProducto } = req.params;
+
+    if (!nombreRestaurante || !nombreCategoria || !nombreProducto) {
+      return res.status(400).json({ error: 'Datos incompletos' });
+    }
+
+    const productoRef = db.collection('restaurantes').doc(nombreRestaurante)
+                         .collection('categorias').doc(nombreCategoria)
+                         .collection('productos').doc(nombreProducto);
+
+    await productoRef.delete();
+    res.status(200).json({ message: 'Producto eliminado' });
+  } catch (err) {
+    console.error('Error al eliminar producto:', err);
+    res.status(500).json({ error: 'Error al eliminar el producto' });
+  }
+});
+
+// Ruta accesible para clientes y vendedores
+router.get('/inventario-completo', 
+  verificarToken, 
+  verificarRol(['cliente', 'vendedor']), 
+  async (req, res) => {
   try {
     const resultado = [];
     const restaurantesSnap = await db.collection('restaurantes').get();
@@ -239,6 +282,67 @@ router.get('/inventario-completo', async (req, res) => {
     console.error('Error al obtener inventario:', err);
     res.status(500).json({ error: 'Error al obtener el inventario' });
   }
+});
+
+// Rutas protegidas
+router.get('/', verificarToken, verificarRol(['vendedor']), async (req, res) => {
+    try {
+        const { nombreRestaurante } = req.query;
+
+        if (!nombreRestaurante) {
+            return res.status(400).json({ error: 'Nombre de restaurante requerido' });
+        }
+
+        const categoriasSnap = await db.collection('restaurantes').doc(nombreRestaurante)
+            .collection('categorias').get();
+
+        const categorias = [];
+        for (const catDoc of categoriasSnap.docs) {
+            const catId = catDoc.id;
+            const productosSnap = await db.collection('restaurantes').doc(nombreRestaurante)
+                .collection('categorias').doc(catId)
+                .collection('productos').get();
+
+            const productos = [];
+            for (const prodDoc of productosSnap.docs) {
+                productos.push({
+                    ...prodDoc.data(),
+                    categoria: catId,
+                    restaurante: nombreRestaurante
+                });
+            }
+
+            categorias.push({
+                nombre: catId,
+                productos
+            });
+        }
+
+        res.status(200).json(categorias);
+    } catch (err) {
+        console.error('Error al obtener inventario:', err);
+        res.status(500).json({ error: 'Error al obtener el inventario' });
+    }
+});
+
+router.post('/', verificarToken, verificarRol(['vendedor']), async (req, res) => {
+    try {
+        const { nombreRestaurante, nombreCategoria, nuevoProducto } = req.body;
+
+        if (!nombreRestaurante || !nombreCategoria || !nuevoProducto) {
+            return res.status(400).json({ error: 'Datos incompletos' });
+        }
+
+        const productoRef = db.collection('restaurantes').doc(nombreRestaurante)
+            .collection('categorias').doc(nombreCategoria)
+            .collection('productos').doc(nuevoProducto.nombre);
+
+        await productoRef.set(nuevoProducto);
+        res.status(201).json({ message: 'Producto creado', producto: nuevoProducto });
+    } catch (err) {
+        console.error('Error al crear producto:', err);
+        res.status(500).json({ error: 'Error al crear el producto' });
+    }
 });
 
 module.exports = router;

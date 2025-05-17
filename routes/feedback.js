@@ -1,68 +1,56 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../firebase');  // Importa db en lugar de admin
+const { db } = require('../config/firebase');
+const { verificarToken, verificarRol } = require('./auth');
 const cors = require('cors');
 
 // Habilitar CORS
 router.use(cors());
 
-// La ruta debe ser '/' ya que '/feedback' ya está en la ruta base
-router.post('/', async (req, res) => {
+// Crear feedback (solo clientes)
+router.post('/', verificarToken, verificarRol(['cliente']), async (req, res) => {
   try {
-    const { rating, comment, restaurant, userId } = req.body;
+    const { message, rating } = req.body;
+    const { userId } = req.user;
 
-    // Validaciones
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ error: 'La calificación debe estar entre 1 y 5' });
-    }
-
-    if (!restaurant) {
-      return res.status(400).json({ error: 'El restaurante es requerido' });
-    }
-
-    // Crear documento en Firestore
-    const feedbackRef = db.collection('feedback');
-    
-    await feedbackRef.add({
-      rating,
-      comment,
-      restaurant,
+    const feedbackRef = await db.collection('feedback').add({
       userId,
-      timestamp: new Date()
+      message,
+      rating,
+      createdAt: new Date().toISOString()
     });
 
-    res.status(201).json({ message: 'Feedback guardado exitosamente' });
-
+    res.status(201).json({ 
+      message: 'Feedback enviado exitosamente',
+      id: feedbackRef.id 
+    });
   } catch (error) {
-    console.error('Error al guardar feedback:', error);
+    console.error('Error al crear feedback:', error);
     res.status(500).json({ error: 'Error al procesar el feedback' });
   }
 });
 
-// Obtener feedbacks por restaurante
-router.get('/:restaurant', async (req, res) => {
+// Obtener todos los feedback (solo vendedores)
+router.get('/', verificarToken, verificarRol(['vendedor']), async (req, res) => {
   try {
-    const { restaurant } = req.params;
-    
-    const feedbackSnapshot = await db
-      .collection('feedback')
-      .where('restaurant', '==', restaurant)
-      .orderBy('timestamp', 'desc')
-      .get();
-
+    const snapshot = await db.collection('feedback').get();
     const feedbacks = [];
-    feedbackSnapshot.forEach(doc => {
+
+    snapshot.forEach(doc => {
+      const feedback = doc.data();
       feedbacks.push({
         id: doc.id,
-        ...doc.data()
+        userId: feedback.userId,
+        mensaje: feedback.message,
+        calificacion: feedback.rating,
+        fecha: feedback.createdAt
       });
     });
 
     res.json(feedbacks);
-
   } catch (error) {
-    console.error('Error al obtener feedbacks:', error);
-    res.status(500).json({ error: 'Error al obtener feedbacks' });
+    console.error('Error al obtener feedback:', error);
+    res.status(500).json({ error: 'Error al obtener feedback' });
   }
 });
 
