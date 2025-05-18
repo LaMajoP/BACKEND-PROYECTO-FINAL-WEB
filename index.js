@@ -45,10 +45,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/inventory', verificarToken, verificarRol(['cliente', 'vendedor']), inventoryRoutes);
 app.use('/inventory/inventario-completo', verificarToken, verificarRol(['cliente', 'vendedor']), inventoryRoutes);
 app.use('/api/feedback', feedbackRouter);
+app.use('/api/orders', verificarToken, verificarRol(['cliente']), ordersRoutes);
 
-// Otras rutas
+
+// Otra ruta
 app.use('/api/sales', salesRouter);
-app.use('/api/orders', ordersRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {

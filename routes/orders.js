@@ -52,7 +52,7 @@ router.post("/historial", async (req, res) => {
 // OBTENER HISTORIAL (GET /api/orders/historial?userId=...)
 router.get("/historial", async (req, res) => {
   try {
-    const userId = req.query.userId;
+    const userId = req.user.userId;
     if (!userId) return res.status(400).json({ error: "Falta userId" });
 
     const snapshot = await db.collection("orders").where("userId", "==", userId).get();
