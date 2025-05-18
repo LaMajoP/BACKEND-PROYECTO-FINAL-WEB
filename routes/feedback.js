@@ -4,8 +4,17 @@ const { db } = require('../config/firebase');
 const { verificarToken, verificarRol } = require('./auth');
 const cors = require('cors');
 
-// Habilitar CORS
-router.use(cors());
+// Habilitar CORS con opciones
+const corsOptions = {
+  origin: [
+    "http://localhost:3000", // Dominio del frontend
+    "https://smart-line-mio.vercel.app/", // Dominio en producción
+  ],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"], // Permitir el encabezado Authorization
+};
+
+router.use(cors(corsOptions));
 
 // Crear feedback (solo clientes)
 router.post('/', verificarToken, verificarRol(['cliente']), async (req, res) => {

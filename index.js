@@ -43,7 +43,8 @@ app.options('*', cors(corsOptions));
 app.use('/api/auth', authRoutes);
 
 // Rutas protegidas
-app.use('/api/inventory', verificarToken, verificarRol(['vendedor']), inventoryRoutes);
+app.use('/api/inventory', verificarToken, verificarRol(['cliente', 'vendedor']), inventoryRoutes);
+app.use('/inventory/inventario-completo', verificarToken, verificarRol(['cliente', 'vendedor']), inventoryRoutes);
 app.use('/api/feedback', verificarToken, verificarRol(['cliente']), feedbackRouter);
 
 // Otras rutas

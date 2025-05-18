@@ -9,53 +9,59 @@ const { db } = require('../config/firebase');
 router.post('/register', async (req, res) => {
   const { email, password, role } = req.body;
 
-  if (!email || !password) return res.status(400).send("Faltan campos");
-  if (!['cliente', 'vendedor'].includes(role)) {
-    return res.status(400).send('Rol inválido');
+  try {
+    if (!email || !password) return res.status(400).send("Faltan campos");
+    if (!['cliente', 'vendedor'].includes(role)) {
+      return res.status(400).send('Rol inválido');
+    }
+
+    // Verificar si el usuario ya existe
+    const userDoc = await db.collection("users").doc(email).get();
+    if (userDoc.exists) {
+      return res.status(400).send("Ese correo ya está en uso");
+    }
+
+    // Generar userId y hash de la contraseña
+    const userId = uuidv4();
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Guardar usuario en la base de datos
+    const userData = {
+      userId,
+      email,
+      password: hashedPassword,
+      role,
+      createdAt: new Date().toISOString(),
+    };
+
+    await db.collection("users").doc(email).set(userData);
+
+    // Generar token JWT
+    const token = jwt.sign(
+      {
+        userId,
+        email,
+        role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    // Responder con el token y los datos del usuario
+    res.status(201).json({
+      message: "Usuario registrado exitosamente",
+      token,
+      user: {
+        userId,
+        email,
+        role,
+      },
+    });
+  } catch (error) {
+    console.error("Error en el registro:", error);
+    res.status(500).send("Error en el servidor");
   }
-
-  // Verificar si el usuario ya existe
-  const userDoc = await db.collection("users").doc(email).get();
-  if (userDoc.exists) {
-    return res.status(400).send("Ese correo ya está en uso");
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10); //hashed password
-
-  await db.collection("users").doc(email).set({
-    email,
-    password: hashedPassword,
-    role
-  });
-
-  res.status(201).send("Usuario registrado");
 });
-
-// LOGIN
-router.post('/login', async (req, res) => { 
-  const { email, password } = req.body; 
-
-  const userDoc = await db.collection("users").doc(email).get(); 
-
-  if (!userDoc.exists) return res.status(404).send("Usuario no existe"); 
-
-  const user = userDoc.data(); 
-
-  const valid = await bcrypt.compare(password, user.password); 
-  if (!valid) return res.status(401).send("Contraseña incorrecta"); 
-
-  const token = jwt.sign( 
-    { 
-      email: user.email, 
-      role: user.role 
-    }, 
-    process.env.JWT_SECRET || 'mi_clave_secreta', 
-    { expiresIn: '1h' } 
-  ); 
-
-  // Incluye el rol en la respuesta
-  res.json({ token, role: user.role }); 
-}); 
 
 // Middleware de verificación de token
 function verificarToken(req, res, next) {
@@ -117,68 +123,7 @@ const validarDatosRegistro = (email, password, role) => {
   return errores;
 };
 
-// Rutas de autenticación
-router.post('/register', async (req, res) => {
-  try {
-    const { email, password, role } = req.body;
-
-    // Validación de datos
-    const errores = validarDatosRegistro(email, password, role);
-    if (errores.length > 0) {
-      return res.status(400).json({ errores });
-    }
-
-    // Verificar si el usuario ya existe
-    const userSnapshot = await db.collection('users')
-      .where('email', '==', email)
-      .get();
-
-    if (!userSnapshot.empty) {
-      return res.status(400).json({ error: 'El email ya está registrado' });
-    }
-
-    // Crear nuevo usuario
-    const userId = uuidv4();
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const userData = {
-      userId,
-      email,
-      password: hashedPassword,
-      role: role.toLowerCase(),
-      createdAt: new Date().toISOString()
-    };
-
-    await db.collection('users').doc(userId).set(userData);
-
-    // Generar token
-    const token = jwt.sign(
-      {
-        userId,
-        email,
-        role: role.toLowerCase()
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '8h' }
-    );
-
-    // Respuesta exitosa
-    res.status(201).json({
-      message: 'Usuario registrado exitosamente',
-      token,
-      user: {
-        userId,
-        email,
-        role: role.toLowerCase()
-      }
-    });
-
-  } catch (error) {
-    console.error('Error en registro:', error);
-    res.status(500).json({ error: 'Error en el servidor' });
-  }
-});
-
+//LOGIN
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -209,7 +154,7 @@ router.post('/login', async (req, res) => {
       {
         userId: userData.userId,
         email: userData.email,
-        role: userData.role,
+        role: userData.role.toLowerCase(),
       },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
@@ -222,7 +167,7 @@ router.post('/login', async (req, res) => {
       user: {
         userId: userData.userId,
         email: userData.email,
-        role: userData.role
+        role: userData.role.toLowerCase()
       }
     });
 
@@ -253,6 +198,6 @@ router.get('/perfil', verificarToken, async (req, res) => {
 
 module.exports = router;
 
-// Si necesitas los middlewares en otros archivos:
+//middlewares en otros archivos:
 module.exports.verificarToken = verificarToken;
 module.exports.verificarRol = verificarRol;
