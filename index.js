@@ -14,8 +14,7 @@ const salesRouter = require('./routes/sales');
 const admin = require("firebase-admin");
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.applicationDefault(), // O usa admin.credential.cert(require("./ruta/credenciales.json"))
-    // databaseURL: "https://<TU_PROJECT_ID>.firebaseio.com" // solo si usas RTDB
+    credential: admin.credential.applicationDefault(),
   });
 }
 
@@ -45,7 +44,7 @@ app.use('/api/auth', authRoutes);
 // Rutas protegidas
 app.use('/api/inventory', verificarToken, verificarRol(['cliente', 'vendedor']), inventoryRoutes);
 app.use('/inventory/inventario-completo', verificarToken, verificarRol(['cliente', 'vendedor']), inventoryRoutes);
-app.use('/api/feedback', verificarToken, verificarRol(['cliente']), feedbackRouter);
+app.use('/api/feedback', feedbackRouter);
 
 // Otras rutas
 app.use('/api/sales', salesRouter);
