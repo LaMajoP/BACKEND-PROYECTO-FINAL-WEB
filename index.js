@@ -8,7 +8,6 @@ const { verificarToken, verificarRol } = require('./routes/auth');
 const inventoryRoutes = require('./routes/inventory');
 const feedbackRouter = require('./routes/feedback');
 const ordersRoutes = require('./routes/orders');
-const salesRouter = require('./routes/sales');
 
 // Inicializa Firebase Admin si usas Firestore
 const admin = require("firebase-admin");
@@ -49,7 +48,6 @@ app.use('/api/orders', verificarToken, verificarRol(['cliente']), ordersRoutes);
 
 
 // Otra ruta
-app.use('/api/sales', salesRouter);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
