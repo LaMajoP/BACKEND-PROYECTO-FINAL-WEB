@@ -32,14 +32,14 @@ router.post("/historial", async (req, res) => {
       } else {
         console.log(`Producto no encontrado:`, prod);
       }
-
     }
 
     // Guardar la orden
+    const fecha = Timestamp.now();
     await db.collection("orders").add({
       userId,
-      productos,
-      fecha: Timestamp.now(),
+      productos: productos.map(p => ({ ...p, fechaCompra: fecha })),
+      fecha,
     });
 
     res.status(201).json({ ok: true });
@@ -52,7 +52,8 @@ router.post("/historial", async (req, res) => {
 // OBTENER HISTORIAL (GET /api/orders/historial?userId=...)
 router.get("/historial", async (req, res) => {
   try {
-    const userId = req.user.userId;
+    // Cambiado: obtener userId del query string
+    const userId = req.query.userId;
     if (!userId) return res.status(400).json({ error: "Falta userId" });
 
     const snapshot = await db.collection("orders").where("userId", "==", userId).get();
